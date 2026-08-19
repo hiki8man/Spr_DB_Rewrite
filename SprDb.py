@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
-from typing import IO
+from typing import IO, Self
 from ReadCstring import ReadStrFromFile
 from pathlib import Path
 from Farc import FarcArchive, FarcEntry
 from collections.abc import Generator
+import struct
 
 
 @dataclass
@@ -14,26 +15,32 @@ class SprNameList:
 @dataclass
 class SprDbConut:
     Sprite: int = 0
-    Texture: int = 0
     SpriteSet: int = 0
 
     def update_sprite(self, spr_name_list: SprNameList) -> None:
-        self.Sprite += len(spr_name_list.Sprite)
-        self.Texture += len(spr_name_list.Texture)
+        self.Sprite += len(spr_name_list.Sprite) + len(spr_name_list.Texture)
         self.SpriteSet += 1
 
     @property
     def sprite_size(self) -> int:
-        count: int = (self.Sprite + self.Texture) * 0x0C
-        count += -count // 0x20
+        count: int = self.Sprite * 0x0C
+        count += -count % 0x20
         return count
 
     @property
     def sprite_set_size(self) -> int:
         count: int = self.SpriteSet * 0x10
-        count += -count // 0x20
+        count += -count % 0x20
         return count
 
+    def get_head_data(self) -> bytes:
+        return struct.pack(
+            "<4I",
+            self.SpriteSet,
+            0x20,
+            self.Sprite,
+            0x20 + self.sprite_set_size
+        )
 def get_spr_name_list(file: IO[bytes]) -> SprNameList:
     file.seek(0x08)
     tex_conut: int = int.from_bytes(file.read(4), "little")
@@ -62,12 +69,30 @@ def get_entry(_path: Path) -> Generator[tuple[str, IO[bytes]], None, None]:
         for entry in farc.entries:
             yield entry.file_name, farc.read_entry_data(entry)
 
-def create_spr_db(_path: Path) -> None:
+def create_spr_db(_path: Path, output_db: Path) -> None:
+
     spr_entry_dict: dict[str, SprNameList] = {}
+    spr_db_count: SprDbConut = SprDbConut()
 
     for file_name, entry_data in get_entry(_path):
         spr_name_list = get_spr_name_list(entry_data)
         spr_entry_dict[file_name] = spr_name_list
+        spr_db_count.update_sprite(spr_name_list)
 
-    
+    with output_db.open("w+b") as db_file:
+        # 写头部
+        db_file.write(spr_db_count.get_head_data())
+        db_file.write(struct.pack("<4I", 0, 0, 0, 0))
 
+        # 预留空白数据区
+        db_file.write(b"\x00" * spr_db_count.sprite_size)
+        db_file.write(b"\x00" * spr_db_count.sprite_set_size)
+
+        # 记录数据区偏移
+        sprite_set_offset: int = db_file.tell()
+        sprite_offset: int = sprite_set_offset - spr_db_count.sprite_set_size
+
+        # 正式写数据
+        for file_name, spr_name_list in spr_entry_dict.items():
+
+            ...
