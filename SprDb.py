@@ -83,16 +83,17 @@ def create_spr_db(_path: Path, output_db: Path) -> None:
         # 写头部
         db_file.write(spr_db_count.get_head_data())
         db_file.write(struct.pack("<4I", 0, 0, 0, 0))
+        sprite_offset: int = db_file.tell()
 
-        # 预留空白数据区
+        # 预留sprite空白数据区
         db_file.write(b"\x00" * spr_db_count.sprite_size)
-        db_file.write(b"\x00" * spr_db_count.sprite_set_size)
-
-        # 记录数据区偏移
         sprite_set_offset: int = db_file.tell()
-        sprite_offset: int = sprite_set_offset - spr_db_count.sprite_set_size
+
+        # 预留sprite_set空白数据区
+        db_file.write(b"\x00" * spr_db_count.sprite_set_size)
+        string_offset: int = db_file.tell()
 
         # 正式写数据
         for file_name, spr_name_list in spr_entry_dict.items():
-
+            
             ...
