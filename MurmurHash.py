@@ -1,6 +1,7 @@
 import struct
 from typing import Optional
 
+
 def calculate(data: bytes) -> int:
     m = 0x7FD652AD
     r = 16

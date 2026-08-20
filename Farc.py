@@ -1,11 +1,13 @@
-from dataclasses import dataclass
-from enum import IntFlag, Enum
-from pathlib import Path
-import ReadCstring
-from io import BytesIO
-from typing import IO
 import struct
 import zlib
+from dataclasses import dataclass
+from enum import Enum, IntFlag
+from io import BytesIO
+from pathlib import Path
+from typing import IO
+
+import ReadCstring
+
 
 def is_path(path: str|Path) -> bool:
     if isinstance(path, str):
@@ -160,6 +162,5 @@ class FarcArchive:
             )
     
         return BytesIO(data)
-
-data = FarcArchive.read_from_file("spr_gam_cmn.farc")
-pass
+if __name__ == "__main__":
+    data = FarcArchive.read_from_file("spr_gam_cmn.farc")

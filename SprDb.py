@@ -1,32 +1,34 @@
-from dataclasses import dataclass, field
-from typing import IO, Self
-from ReadCstring import ReadStrFromFile
-from pathlib import Path
-from Farc import FarcArchive, FarcEntry
-from collections.abc import Generator
 import struct
-import MurmurHash
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from io import SEEK_END
+from pathlib import Path
+from typing import IO, Self
+
+import MurmurHash
+from Farc import FarcArchive
+from ReadCstring import ReadStrFromFile
 
 
 @dataclass
 class SprDbSet:
     file_name: str
+    use_dml: bool
     sprite: list[str] = field(default_factory=list)
     texture: list[str] = field(default_factory=list)
 
-    @property
-    def set_name(self) -> str:
-        return Path(self.file_name).stem.upper()
+    def __post_init__(self) -> None:
+        real_set_name = Path(self.file_name).stem.upper()
+        
+        if real_set_name.startswith("SPR_SEL_PVTMB_") and self.use_dml:
+            self.set_name = "SPR_SEL_PVTMB"
+        else:
+            self.set_name = real_set_name
 
-    @property
-    def sprite_suffix(self) -> str:
-        return self.set_name
+        self.sprite_suffix = self.set_name
+        self.texture_suffix = self.set_name.replace("SPR_", "SPRTEX_", 1)
 
-    @property
-    def texture_suffix(self) -> str:
-        name: str = self.set_name.split("_", maxsplit=1)[1]
-        return f"SPRTEX_{name}"
+        self.id: int = MurmurHash.calculate_str(real_set_name)
 
 
 @dataclass
@@ -34,7 +36,7 @@ class SprDb:
     _dict: dict[str, SprDbSet] = field(default_factory=dict)
 
     def updata(self, spr_db_set: SprDbSet) -> Self:
-        self._dict[spr_db_set.set_name] = spr_db_set
+        self._dict[spr_db_set.file_name.upper()] = spr_db_set
         return self
 
     @property
@@ -53,7 +55,7 @@ class SprDb:
     def sets_count(self) -> int:
         return len(self.sets)
     
-def get_spr_db_set(file: IO[bytes], file_name: str) -> SprDbSet:
+def get_spr_db_set(file: IO[bytes], file_name: str, use_dml: bool = True) -> SprDbSet:
     file.seek(0x08)
     tex_conut: int = int.from_bytes(file.read(4), "little")
     spr_count: int = int.from_bytes(file.read(4), "little")
@@ -62,7 +64,7 @@ def get_spr_db_set(file: IO[bytes], file_name: str) -> SprDbSet:
     tex_offset: int = int.from_bytes(file.read(4), "little")
     spr_offset: int = int.from_bytes(file.read(4), "little")
 
-    spr_db_set: SprDbSet = SprDbSet(file_name)
+    spr_db_set: SprDbSet = SprDbSet(file_name, use_dml)
 
     for i in range(tex_conut): 
         file.seek(tex_offset + i * 4)
@@ -85,11 +87,11 @@ def get_entry(_path: Path) -> Generator[tuple[str, IO[bytes]], None, None]:
 def get_c_string(string: str) -> bytes:
     return string.encode("utf-8") + b"\x00"
 
-def create_spr_db(_path: Path, output_db: Path) -> None:
+def create_spr_db(_path: Path, output_db: Path, use_dml: bool = True) -> None:
     spr_db: SprDb = SprDb()
 
     for file_name, entry_data in get_entry(_path):
-        spr_db_set: SprDbSet = get_spr_db_set(entry_data, file_name)
+        spr_db_set: SprDbSet = get_spr_db_set(entry_data, file_name, use_dml)
         spr_db.updata(spr_db_set)
 
     with output_db.open("w+b") as db_file:
@@ -132,7 +134,10 @@ def create_spr_db(_path: Path, output_db: Path) -> None:
             db_file.write(get_c_string(spr_set.file_name))
 
             db_file.seek(sprite_set_pts)
-            set_id: int = MurmurHash.calculate_str(spr_set.set_name)
+            if spr_set.file_name.upper() == "SPR_SEL_PVTMB.BIN":
+                set_id: int = 4527 # 别问我为什么要做判断，问Sega
+            else:
+                set_id: int = spr_set.id
 
             db_file.write(struct.pack(
                 "<IIII", 

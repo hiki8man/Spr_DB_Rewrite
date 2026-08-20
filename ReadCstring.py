@@ -1,5 +1,5 @@
-from typing import IO
 import logging
+from typing import IO
 
 logger = logging.getLogger("ReadCstring")
 
