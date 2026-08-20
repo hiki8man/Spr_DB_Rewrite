@@ -1,0 +1,2 @@
+基本上是旧的sprdb生成的重写版，让AI帮我整理了下MikuMikuLibrary和kkdlib的逻辑确保不会再出现不兼容工具的问题
+
